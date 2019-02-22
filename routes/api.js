@@ -9,11 +9,10 @@
 'use strict';
 
 var expect = require('chai').expect;
-var MongoClient = require('mongodb').MongoClient;
+var MongoClient = require('mongodb');
 var ObjectId = require('mongodb').ObjectID;
 
-const CONNECTION_STRING = process.env.DB;
-let mongoclient = MongoClient.connect(CONNECTION_STRING);
+const CONNECTION_STRING = `${process.env.DB}/${process.env.DB_NAME}`;
 
 module.exports = function (app) {
 
@@ -22,19 +21,21 @@ module.exports = function (app) {
             var project = req.params.project;
             let findCondition = req.query || {};
             findCondition.project = project;
-            mongoclient.open(function (err, mongoclient) {
+            MongoClient.connect(CONNECTION_STRING, function (err, db) {
                 if (err) {
-                    res.json("error connecting to database");
-                    mongoclient.close();
+                    console.log(err);
+                    res.status(500).json("could not connect to database", err);
                 } else {
-                    const db = mongoclient.db(process.env.DB_NAME);
-                    db.collection('Issues').find(findCondition, function (err, result) {
+                    db.collection('Issues').find(findCondition).toArray(function (err, result) {
                         if (err) {
+                            console.log(err);
                             res.json("error finding data");
                         } else {
-                            res.json(result.map(re => { delete re.project; return re; }));
+                            console.log(result);
+                            result.forEach(re => delete re.project);
+                            res.json(result);
                         }
-                        mongoclient.close();
+                        db.close();
                     });
                 }
             });
@@ -56,20 +57,20 @@ module.exports = function (app) {
             let updated_on = dateNowUTC;
             let open = true;
             var issueObject = { project, issue_title, issue_text, created_by, assigned_to, status_text, created_on, updated_on, open };
-            mongoclient.open(function (err, mongoclient) {
+            MongoClient.connect(CONNECTION_STRING, function (err, db) {
                 if (err) {
-                    res.status(500).json("Error connecting to database");
-                    mongoclient.close();
+                    console.log(err);
+                    res.status(500).json("could not connect to database");
                 } else {
-                    var db = mongoclient.db(process.env.DB_NAME);
                     db.collection('Issues').insertOne(issueObject, function (err, result) {
                         if (err) {
+                            console.log(err);
                             res.status(500).json("Error inserting issue");
                         } else {
                             let { _id, issue_title, issue_text, created_on, updated_on, created_by, assigned_to, open, status_text } = result;
                             res.json({ _id, issue_title, issue_text, created_on, updated_on, created_by, assigned_to, open, status_text });
                         }
-                        mongoclient.close();
+                        db.close();
                     });
                 }
             });
@@ -86,19 +87,19 @@ module.exports = function (app) {
                 res.json("no updated field sent");
             } else {
                 updates.updated_on = (new Date()).toUTCString();
-                mongoclient.open(function (err, mongoclient) {
+                MongoClient.connect(CONNECTION_STRING, function (err, db) {
                     if (err) {
-                        res.status(500).json("could not update " + _id);
-                        mongoclient.close();
+                        console.log(err);
+                        res.status(500).json("could not connect to database", err);
                     } else {
-                        var db = mongoclient.db(process.env.DB_NAME);
                         db.collection('Issues').update({ _id }, updates, function (err, result) {
                             if (err) {
+                                console.log(err);
                                 res.status(500).json("could not update " + _id);
                             } else {
                                 res.json("successfully updated " + _id);
                             }
-                            mongoclient.close();
+                            db.close();
                         });
                     }
                 });
@@ -108,21 +109,21 @@ module.exports = function (app) {
             var project = req.params.project;
             let _id = req.body._id;
             if (_id === undefined) {
-                res.json('_id error');
+                res.status(500).json('_id error');
             } else {
-                mongoclient.open(function (err, mongoclient) {
+                MongoClient.connect(CONNECTION_STRING, function (err, db) {
                     if (err) {
+                        console.log(err);
                         res.status(500).json('could not delete ' + _id);
-                        mongoclient.close();
                     } else {
-                        var db = mongoclient.db(process.env.DB_NAME);
                         db.collection('Issues').deleteOne({ _id }, function (err, result) {
                             if (err) {
+                                console.log(err);
                                 res.status(500).json('could not delete ' + _id);
                             } else {
                                 res.json('deleted ' + _id);
                             }
-                            mongoclient.close();
+                            db.close();
                         });
                     }
                 });
